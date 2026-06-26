@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premium Student Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; background-color: #f0f4f8; color: #333; }
+        .container { max-width: 750px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0px 4px 20px rgba(0,0,0,0.08); }
+        h2 { color: #1e3a8a; text-align: center; margin-top: 0; font-size: 24px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; color: #475569; }
+        input, select, button { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
+        button { background-color: #2563eb; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { background-color: #1d4ed8; }
+        .btn-attendance { background-color: #10b981; }
+        .btn-attendance:hover { background-color: #059669; }
+        
+        /* Progress Bar Styling */
+        .progress-container { width: 100%; background-color: #e2e8f0; border-radius: 8px; margin-top: 5px; overflow: hidden; }
+        .progress-bar { height: 15px; background-color: #3b82f6; text-align: center; color: white; font-size: 11px; line-height: 15px; font-weight: bold; transition: width 0.4s ease; }
+        .low-attendance { background-color: #ef4444 !important; } /* Red for < 75% */
+        .good-attendance { background-color: #10b981 !important; } /* Green for >= 75% */
+        
+        .search-box { margin: 20px 0; padding: 10px; border: 2px solid #3b82f6; border-radius: 6px; }
+        .student-card { background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; margin-top: 10px; border-radius: 8px; }
+        .flex-box { display: flex; justify-content: space-between; align-items: center; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
+        .badge-red { background: #ef4444; }
+        .badge-green { background: #10b981; }
+        .history-list { margin-top: 10px; font-size: 13px; color: #64748b; padding-left: 20px; }
+        .btn-delete { background: #dc3545; width: auto; padding: 3px 8px; font-size: 12px; margin-top: 0; margin-left: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- LOGIN PANEL -->
+    <div id="loginSection">
+        <h2>🔒 Admin Login</h2>
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="adminUser" placeholder="Enter 'admin'">
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="adminPass" placeholder="Enter '123'">
+        </div>
+        <button onclick="loginAdmin()">Login to System</button>
+        <p id="loginError" style="color:red; text-align:center; display:none; font-weight:bold;"></p>
+    </div>
+
+    <!-- MAIN DASHBOARD (HIDDEN UNTIL LOGIN) -->
+    <div id="dashboardSection" style="display: none;">
+        <h2>👤 Student Registration</h2>
+        <form id="registerForm">
+            <div class="form-group"><label>Student Name</label><input type="text" id="regName" required></div>
+            <div class="form-group"><label>Roll Number</label><input type="text" id="regRoll" placeholder="e.g. 101" required></div>
+            <div class="form-group"><label>Department</label><input type="text" id="regDept" required></div>
+            <button type="submit">Register Student</button>
+        </form>
+
+        <hr style="margin: 30px 0; border: 0; border-top: 2px dashed #cbd5e1;">
+
+        <h2>📥 Mark Attendance</h2>
+        <form id="attendanceForm">
+            <div class="form-group"><label>Roll Number</label><input type="text" id="attRoll" required></div>
+            <div class="form-group"><label>Date</label><input type="date" id="attDate" required></div>
+            <div class="form-group">
+                <label>Status</label>
+                <select id="attStatus"><option value="Present">Present</option><option value="Absent">Absent</option></select>
+            </div>
+            <button type="submit" class="btn-attendance">Submit Attendance</button>
+        </form>
+
+        <hr style="margin: 30px 0; border: 0; border-top: 2px dashed #cbd5e1;">
+
+        <h2>📊 Smart Analytics Dashboard</h2>
+        <input type="text" id="searchInp" class="search-box" placeholder="🔍 Search Student by Roll Number or Name..." oninput="renderReport()">
+        
+        <div id="reportRecords"></div>
+    </div>
+</div>
+
+<script>
+    let reportData = [];
+
+    // 1. Admin Login Function
+    async function loginAdmin() {
+        const username = document.getElementById('adminUser').value;
+        const password = document.getElementById('adminPass').value;
+
+        const response = await fetch('http://localhost:5000/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await response.json();
+
+        if(data.success) {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('dashboardSection').style.display = 'block';
+            fetchReport();
+        } else {
+            const err = document.getElementById('loginError');
+            err.innerText = data.message;
+            err.style.display = 'block';
+        }
+    }
+
+    // 2. Register Student
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('regName').value;
+        const rollNo = document.getElementById('regRoll').value;
+        const department = document.getElementById('regDept').value;
+
+        const response = await fetch('http://localhost:5000/api/students/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, rollNo, department })
+        });
+        const data = await response.json();
+        alert(data.message);
+        if(data.success) {
+            document.getElementById('registerForm').reset();
+            fetchReport();
+        }
+    });
+
+    // 3. Mark Attendance
+    document.getElementById('attendanceForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const rollNo = document.getElementById('attRoll').value;
+        const date = document.getElementById('attDate').value;
+        const status = document.getElementById('attStatus').value;
+
+        const response = await fetch('http://localhost:5000/api/students/attendance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rollNo, date, status })
+        });
+        const data = await response.json();
+        alert(data.message);
+        if(data.success) {
+            document.getElementById('attendanceForm').reset();
+            fetchReport();
+        }
+    });
+
+    // 4. Fetch Report Data
+    async function fetchReport() {
+        const response = await fetch('http://localhost:5000/api/students/attendance-report');
+        const result = await response.json();
+        if(result.success) {
+            reportData = result.data;
+            renderReport();
+        }
+    }
+
+    // 5. Render Cards with Progress Bars & Search Filter
+    function renderReport() {
+        const container = document.getElementById('reportRecords');
+        const searchText = document.getElementById('searchInp').value.toLowerCase();
+        container.innerHTML = '';
+
+        const filteredData = reportData.filter(student => 
+            student.name.toLowerCase().includes(searchText) || 
+            student.rollNo.toLowerCase().includes(searchText)
+        );
+
+        filteredData.forEach(student => {
+            const isLow = student.percentage < 75;
+            let historyHTML = '';
+            
+            student.history.forEach(h => {
+                historyHTML += `<li>📅 ${h.date} - <b>${h.status}</b> 
+                <button class="btn-delete" onclick="deleteAttendance('${student.rollNo}', '${h.date}')">Delete</button></li>`;
+            });
+
+            const card = `
+                <div class="student-card">
+                    <div class="flex-box">
+                        <div>
+                            <h3>👤 ${student.name} <span style="font-size:14px; color:#64748b;">(Roll: ${student.rollNo})</span></h3>
+                            <p style="margin: 2px 0; font-size:14px;">🌿 Dept: ${student.department}</p>
+                        </div>
+                        <span class="badge ${isLow ? 'badge-red' : 'badge-green'}">
+                            ${student.percentage}% Attendance
+                        </span>
+                    </div>
+                    
+                    <div class="progress-container">
+                        <div class="progress-bar ${isLow ? 'low-attendance' : 'good-attendance'}" style="width: ${student.percentage}%">
+                            ${student.percentage}%
+                        </div>
+                    </div>
+
+                    <ul class="history-list">
+                        ${historyHTML || '<span style="color:#94a3b8;">No attendance logs yet.</span>'}
+                    </ul>
+                </div>
+            `;
+            container.innerHTML += card;
+        });
+    }
+
+    // 6. Delete Attendance
+    async function deleteAttendance(rollNo, date) {
+        if(confirm(`Delete attendance for ${rollNo} on ${date}?`)) {
+            const response = await fetch('http://localhost:5000/api/students/delete-attendance', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rollNo, date })
+            });
+            const data = await response.json();
+            if(data.success) {
+                fetchReport();
+            }
+        }
+    }
+</script>
+
+</body>
+</html>
